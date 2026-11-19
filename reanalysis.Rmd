@@ -1,0 +1,460 @@
+---
+title: "Re-analysis of Bareket & Fiske (2023)"
+author: "Abby Person"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Sexism and Relationship Processes
+
+```{r}
+library(readr)
+library(metafor)
+data <- read_csv("~/Downloads/Effect Sizes_relationships - Sheet1.csv", 
+    col_types = cols(Study...3 = col_character(), 
+        N_m = col_number(), N_w = col_number(), 
+        MenHS_a = col_number(), MenBS_a = col_number(), 
+        WomenHS_a = col_number(), WomenBS_a = col_number(), 
+        MenHS_p = col_number(), MenBS_p = col_number(), 
+        WomenHS_p = col_number(), WomenBS_p = col_number()))
+
+
+```
+
+## Effect Size Calculations
+
+```{r}
+# Calculating fisher z 
+men_hsA<- escalc(
+  measure = "ZCOR",
+  ri = MenHS_a,
+  ni = N_m,
+  data = data
+)
+
+men_bsA<- escalc(
+  measure = "ZCOR",
+  ri = MenBS_a,
+  ni = N_m,
+  data = data
+)
+
+women_hsA<- escalc(
+  measure = "ZCOR",
+  ri = WomenHS_a,
+  ni = N_w,
+  data = data
+)
+
+women_bsA<- escalc(
+  measure = "ZCOR",
+  ri = WomenBS_a,
+  ni = N_w,
+  data = data
+)
+
+data$MenHSa_z<- men_hsA$yi
+data$MenHSa_se<- sqrt(men_hsA$vi)
+
+data$MenBSa_z<- men_bsA$yi
+data$MenBSa_se<- sqrt(men_bsA$vi)
+
+data$WomenHSa_z<- women_hsA$yi
+data$WomenHSa_se<- sqrt(women_hsA$vi)
+
+data$WomenBSa_z<- women_bsA$yi
+data$WomenBSa_se<- sqrt(women_bsA$vi)
+
+```
+
+
+## Satisfaction meta-analytic estimate
+```{r}
+Pos <- data$DV_re == "Positive Relationship Processes"
+
+model.mhs <- rma(
+  yi = data$MenHSa_z[Pos],
+  sei = data$MenHSa_se[Pos],
+  method = "REML"
+)
+
+model.mhs
+predict(model.mhs, transf = transf.ztor)
+
+#mbs
+model.mbs <- rma(
+  yi = data$MenBSa_z,
+  sei = data$MenBSa_se,
+  subset = (data$DV_re == "Positive Relationship Processes"),
+  method = "REML"
+)
+
+model.mbs
+predict(model.mbs, transf = transf.ztor)
+
+#whs
+model.whs <- rma(
+  yi = data$WomenHSa_z[Pos],
+  sei = data$WomenHSa_se[Pos],
+  method = "REML"
+)
+
+model.whs
+predict(model.whs, transf = transf.ztor)
+
+#wbs
+model.wbs <- rma(
+  yi = data$WomenBSa_z,
+  sei = data$WomenBSa_se,
+  subset = (data$DV_re == "Positive Relationship Processes"),
+  method = "REML"
+)
+
+model.wbs
+predict(model.wbs, transf = transf.ztor)
+```
+
+
+
+
+## Conflict meta-analytic estimate
+
+```{r}
+Neg <- data$DV_re == "Negative Relationship Processes"
+
+model.mhs.2 <- rma(
+  yi = data$MenHSa_z[Neg],
+  sei = data$MenHSa_se[Neg],
+  method = "REML"
+)
+
+model.mhs.2
+predict(model.mhs.2, transf = transf.ztor)
+
+#mbs
+model.mbs.2 <- rma(
+  yi = data$MenBSa_z,
+  sei = data$MenBSa_se,
+  subset = (data$DV_re == "Negative Relationship Processes"),
+  method = "REML"
+)
+
+model.mbs.2
+predict(model.mbs.2, transf = transf.ztor)
+
+#whs
+model.whs.2 <- rma(
+  yi = data$WomenHSa_z[Neg],
+  sei = data$WomenHSa_se[Neg],
+  method = "REML"
+)
+
+model.whs.2
+predict(model.whs.2, transf = transf.ztor)
+
+#wbs
+model.wbs.2 <- rma(
+  yi = data$WomenBSa_z,
+  sei = data$WomenBSa_se,
+  subset = (data$DV_re == "Negative Relationship Processes"),
+  method = "REML"
+)
+
+model.wbs.2
+predict(model.wbs.2, transf = transf.ztor)
+```
+
+
+
+## Benevolent Sexism Negative Relationship Outcome Plots
+
+```{r}
+pdf(
+  "benNeg.pdf",
+  width = 11,
+  height = 8.5
+)
+Neg <- data$DV_re == "Negative Relationship Processes"
+par(mfrow = c(2,1))
+forest(
+  model.mbs.2,
+  slab = paste0(
+    data$Study,
+    " (N = ",
+    data$N_m,
+    ")"
+  ),
+  transf = transf.ztor,
+  xlab = "Correlation (r)",
+  main = "Men's Benevolent Sexism and Negative Relationship Processes",
+  alim = c(-1, 1)
+)
+
+forest(
+  model.wbs.2,
+  slab = paste0(
+    data$Study,
+    " (N = ",
+    data$N_w,
+    ")"
+  ),
+  transf = transf.ztor,
+  xlab = "Correlation (r)",
+  main = "Women's Benevolent Sexism and Negative Relationship Processes",
+  alim = c(-1, 1)
+)
+```
+
+
+## Benevolent Sexism Positive Relationship Outcomes Plots
+
+```{r}
+pdf(
+  "benPosplots.pdf",
+  width = 11,
+  height = 12
+)
+par(mfrow = c(2,1))
+
+forest(
+  model.mbs,
+  slab = paste0(
+    data$Study,
+    " (N = ",
+    data$N_m,
+    ")"
+  ),
+  transf = transf.ztor,
+  xlab = "Correlation (r)",
+  main = "Men's Benevolent Sexism and Positive Relationship Processes",
+  alim = c(-1, 1)
+)
+
+forest(
+  model.wbs,
+  slab = paste0(
+    data$Study,
+    " (N = ",
+    data$N_w,
+    ")"
+  ),
+  transf = transf.ztor,
+  xlab = "Correlation (r)",
+  main = "Women's Benevolent Sexism and Positive Relationship Processes",
+  alim = c(-1, 1)
+)
+
+```
+
+
+
+# Sexism and Mental Health
+
+```{r}
+data.1 <- read_csv("~/Downloads/Effect Sizes_mentalhealth - Sheet1.csv", 
+    col_types = cols(Study_num = col_character(), 
+        N_m = col_number(), N_w = col_number(), 
+        MenHS_a = col_number(), MenBS_a = col_number(), 
+        WomenHS_a = col_number(), WomenBS_a = col_number(), 
+        MenHS_p = col_number(), MenBS_p = col_number(), 
+        WomenHS_p = col_number(), WomenBS_p = col_number()))
+```
+
+## Effect size calculation
+
+```{r}
+## Effect Size Calculations
+
+
+# Calculating fisher z 
+men_hsA.mh<- escalc(
+  measure = "ZCOR",
+  ri = MenHS_a,
+  ni = N_m,
+  data = data.1
+)
+
+men_bsA.mh<- escalc(
+  measure = "ZCOR",
+  ri = MenBS_a,
+  ni = N_m,
+  data = data.1
+)
+
+women_hsA.mh<- escalc(
+  measure = "ZCOR",
+  ri = WomenHS_a,
+  ni = N_w,
+  data = data.1
+)
+
+women_bsA.mh<- escalc(
+  measure = "ZCOR",
+  ri = WomenBS_a,
+  ni = N_w,
+  data = data.1
+)
+
+data.1$MenHSa_z.mh<- men_hsA.mh$yi
+data.1$MenHSa_se.mh<- sqrt(men_hsA.mh$vi)
+
+data.1$MenBSa_z.mh<- men_bsA.mh$yi
+data.1$MenBSa_se.mh<- sqrt(men_bsA.mh$vi)
+
+data.1$WomenHSa_z.mh<- women_hsA.mh$yi
+data.1$WomenHSa_se.mh<- sqrt(women_hsA.mh$vi)
+
+data.1$WomenBSa_z.mh<- women_bsA.mh$yi
+data.1$WomenBSa_se.mh<- sqrt(women_bsA.mh$vi)
+
+```
+
+# Meta-analytic estimates
+
+```{r}
+PMH <- data.1$DV_recoded == "PMH"
+
+#mbs and postive mental health
+model.mbs.pmh <- rma(
+  yi = data.1$MenBSa_z.mh[PMH],
+  sei = data.1$MenBSa_se.mh[PMH],
+  method = "REML"
+)
+
+model.mbs.pmh
+predict(model.mbs.pmh, transf = transf.ztor)
+
+#wbs and positive mental health
+model.wbs.pmh <- rma(
+  yi = data.1$WomenBSa_z.mh[PMH],
+  sei = data.1$WomenBSa_se.mh[PMH],
+  method = "REML"
+)
+
+model.wbs.pmh
+predict(model.wbs.pmh, transf = transf.ztor)
+
+
+# BS and negative mental health
+
+NMH <- data.1$DV_recoded == "NMH"
+
+#mbs and negative mental health
+model.mbs.nmh <- rma(
+  yi = data.1$MenBSa_z.mh[NMH],
+  sei = data.1$MenBSa_se.mh[NMH],
+  method = "REML"
+)
+
+model.mbs.nmh
+predict(model.mbs.nmh, transf = transf.ztor)
+
+#wbs and negative mental health
+model.wbs.nmh <- rma(
+  yi = data.1$WomenBSa_z.mh[NMH],
+  sei = data.1$WomenBSa_se.mh[NMH],
+  method = "REML"
+)
+
+model.wbs.nmh
+predict(model.wbs.nmh, transf = transf.ztor)
+```
+## Forest Plots
+
+### Positive Mental Health
+
+```{r}
+pdf(
+  "benPMHplots.pdf",
+  width = 11,
+  height = 8.5
+)
+par(mfrow = c(2,1))
+
+x_limits <- c(-2.5, 2)  
+x_ticks  <- seq(-1, 1, by = 0.5)
+
+forest(
+  model.mbs.pmh,
+  slab = paste0(
+    data.1$Study[PMH],
+    " (N = ",
+    data.1$N_m[PMH],
+    ")"
+  ),
+  transf = transf.ztor,
+  xlab = "Correlation (r)",
+  main = "Men's Benevolent Sexism and Positive Mental Health",
+  xlim = x_limits,
+  alim = c(-1, 1),
+  at = x_ticks
+)
+
+forest(
+  model.wbs.pmh,
+  slab = paste0(
+    data.1$Study[PMH],
+    " (N = ",
+    data.1$N_w[PMH],
+    ")"
+  ),
+  transf = transf.ztor,
+  xlab = "Correlation (r)",
+  main = "Women's Benevolent Sexism and Positive Mental Health",
+  xlim = x_limits,
+  alim = c(-1, 1),
+  at = x_ticks
+)
+
+dev.off()
+```
+
+### Negative Mental Health
+
+```{r}
+pdf(
+  "benNMHplots.pdf",
+  width = 11,
+  height = 8.5
+)
+par(mfrow = c(2, 1))
+
+# Set fixed horizontal bounds and tick locations for consistent alignment
+x_limits <- c(-2.5, 2)  
+x_ticks  <- seq(-1, 1, by = 0.5)
+
+forest(
+  model.mbs.nmh,
+  slab = paste0(
+    data.1$Study[NMH],
+    " (N = ",
+    data.1$N_m[NMH],
+    ")"
+  ),
+  transf = transf.ztor,
+  xlab = "Correlation (r)",
+  main = "Men's Benevolent Sexism and Negative Mental Health",
+  xlim = x_limits,
+  alim = c(-1, 1),
+  at = x_ticks
+)
+
+forest(
+  model.wbs.nmh,
+  slab = paste0(
+    data.1$Study[NMH],
+    " (N = ",
+    data.1$N_w[NMH],
+    ")"
+  ),
+  transf = transf.ztor,
+  xlab = "Correlation (r)",
+  main = "Women's Benevolent Sexism and Negative Mental Health",
+  xlim = x_limits,
+  alim = c(-1, 1),
+  at = x_ticks
+)
+
+dev.off()
+```
+
