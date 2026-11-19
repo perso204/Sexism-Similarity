@@ -1,0 +1,150 @@
+---
+title: "Sexism Power Analysis"
+author: "Abby Person"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+
+
+
+library(lavaan)
+library(MASS)
+library(ggplot2)
+library(dplyr)
+
+set.seed(42) # Set seed for reproducibility
+
+
+sample_sizes_dyads <- c(500, 600, 700, 800, 900, 1000)
+n_sims             <- 2000   # sims
+alpha              <- 0.05  # Salpha
+
+# All estimates from Overall et al. (2025)
+# Predictor Scale Parameters (-3 to 3 Scale)
+mu_m_scale <-  0.18  # Men's expected mean benevolent sexism
+mu_w_scale <- -0.71  # Women's expected mean benevolent sexism
+sd_x       <-  1.04  # Estimated standard deviation on a 7-point scale (-3 to 3)
+
+# Population Standardized Effect Sizes
+b_act_m  <- -0.15   # Men's Actor effect
+b_part_m <- .09   # Women's bs to men's hostile behavior
+b_act_w  <-  0.13   # Women's Actor effect
+b_part_w <-  -.14   # Men's bs to women's hostile behavior
+
+# Standardized Interaction Effect (Overall et al., 2025)
+b_int_m  <- -0.09   # Interaction predicting Men's outcome
+b_int_w  <- -0.09   # Interaction predicting Women's outcome
+
+# Correlations
+r_x1_x2  <-  0.36   # Correlation between Men's & Women's BS
+r_e1_e2  <-  0.30   # Correlation between Men's & Women's Residual Outcomes
+
+# ------------------------------------------------------------------------------
+# 2. DATA GENERATION FUNCTION
+# ------------------------------------------------------------------------------
+generate_dyad_data <- function(N, b_act_m, b_part_m, b_act_w, b_part_w, 
+                               b_int_m, b_int_w, r_x1_x2, r_e1_e2,
+                               mu_m, mu_w, sd_x) {
+  
+  # Covariance matrix for raw scale predictors
+  sigma_x <- matrix(c(sd_x^2,           r_x1_x2 * sd_x^2, 
+                      r_x1_x2 * sd_x^2, sd_x^2), nrow = 2)
+  
+  # Generate predictors with asymmetrical population means
+  X_raw <- mvrnorm(n = N, mu = c(mu_m, mu_w), Sigma = sigma_x)
+  
+  # Standardize/Center predictors for standardized coefficient estimation
+  # Center around respective population means to isolate interaction
+  X_m <- (X_raw[, 1] - mu_m) / sd_x
+  X_w <- (X_raw[, 2] - mu_w) / sd_x
+  
+  # Cross-partner Interaction Term
+  X_int <- X_m * X_w
+  
+  # Generate correlated residual errors (Var = 1)
+  sigma_e <- matrix(c(1,       r_e1_e2, 
+                      r_e1_e2, 1), nrow = 2)
+  E <- mvrnorm(n = N, mu = c(0, 0), Sigma = sigma_e)
+  e_m <- E[, 1]
+  e_w <- E[, 2]
+  
+  # Generate outcomes
+  Y_m <- b_act_m * X_m + b_part_m * X_w + b_int_m * X_int + e_m
+  Y_w <- b_act_w * X_w + b_part_w * X_m + b_int_w * X_int + e_w
+  
+  data.frame(
+    X_m = X_m, X_w = X_w, 
+    X_int = X_int, 
+    Y_m = Y_m, Y_w = Y_w
+  )
+}
+
+
+apim_model <- '
+  # Outcomes predicted by predictors and cross-partner interaction
+  Y_m ~ act_m*X_m + part_m*X_w + int_m*X_int
+  Y_w ~ act_w*X_w + part_w*X_m + int_w*X_int
+
+  # Correlated Predictors & Residuals
+  X_m ~~ X_w
+  Y_m ~~ Y_w
+'
+
+# ------------------------------------------------------------------------------
+# 4. SIMULATION LOOP
+# ------------------------------------------------------------------------------
+results_list <- list()
+
+cat("Starting Monte Carlo Simulation...\n")
+
+for (N in sample_sizes_dyads) {
+  cat(sprintf("Simulating N = %d dyads (%d individuals)...\n", N, N * 2))
+  
+  p_val_int_m <- numeric(n_sims)
+  p_val_int_w <- numeric(n_sims)
+  
+  for (i in 1:n_sims) {
+    df <- generate_dyad_data(N, b_act_m, b_part_m, b_act_w, b_part_w, 
+                             b_int_m, b_int_w, r_x1_x2, r_e1_e2,
+                             mu_m = mu_m_scale, mu_w = mu_w_scale, sd_x = sd_x)
+    
+    fit <- sem(apim_model, data = df, warn = FALSE, std.lv = TRUE)
+    
+    if (lavInspect(fit, "converged")) {
+      pvals <- parameterEstimates(fit)
+      
+      p_val_int_m[i] <- pvals$pvalue[pvals$label == "int_m"]
+      p_val_int_w[i] <- pvals$pvalue[pvals$label == "int_w"]
+    } else {
+      p_val_int_m[i] <- NA
+      p_val_int_w[i] <- NA
+    }
+  }
+  
+  results_list[[as.character(N)]] <- data.frame(
+    N_Dyads = N,
+    N_Individuals = N * 2,
+    Power_Interaction_Men = mean(p_val_int_m < alpha, na.rm = TRUE),
+    Power_Interaction_Women = mean(p_val_int_w < alpha, na.rm = TRUE)
+  )
+}
+
+power_results <- bind_rows(results_list)
+power_results
+
+
+```
+
+
+```
+
+# Small correlations
+
+```{r}
+library(pwr)
+pwr.r.test(r = 0.1, power = 0.80, sig.level = 0.05, n = NULL)
+```
+
+
