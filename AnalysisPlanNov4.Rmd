@@ -1,0 +1,187 @@
+---
+title: "Analysis Plan"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(MASS)
+library(tidyverse)
+library(lavaan)
+library(lavaanPlot)
+
+set.seed(42)
+n_dyads <- 900
+
+# List of partner-specific continuous variables
+var_names <- c("sat", "prob", "bs", "hs", "work", "goodkids",
+               "prio_rel", "cgd", "het_int", "prot_pat", "fin_stress", "house_stress")
+
+# Construct variable names for women (_w) and men (_m)
+all_vars <- c(paste0(var_names, "_w"), paste0(var_names, "_m"))
+n_vars <- length(all_vars)
+
+# Set neutral means for all variables (M = 0)
+neutral_means <- setNames(rep(0, n_vars), all_vars)
+
+cov_matrix <- diag(1, n_vars)
+rownames(cov_matrix) <- colnames(cov_matrix) <- all_vars
+
+for (v in var_names) {
+  w_name <- paste0(v, "_w")
+  m_name <- paste0(v, "_m")
+  cov_matrix[w_name, m_name] <- 0.3
+  cov_matrix[m_name, w_name] <- 0.3
+}
+
+# Generate raw continuous data (Standardized Z-scores)
+raw_continuous <- mvrnorm(n = n_dyads, mu = neutral_means, Sigma = cov_matrix) %>% 
+  as.data.frame()
+
+
+# Dyad-Level Categorical Variables (Equal probability)
+dyad_level <- tibble(
+  dyad_id = 1:n_dyads,
+  kids = sample(c("-1", "1"), size = n_dyads, replace = TRUE, prob = c(0.5, 0.5)),
+  cohabitating = sample(c("-1", "1"), size = n_dyads, replace = TRUE, prob = c(0.5, 0.5))
+)
+
+# Combine into Wide Format
+dyadic_wide <- bind_cols(dyad_level, raw_continuous)
+
+# Reshape to Long Format
+dyadic_long <- dyadic_wide %>%
+  pivot_longer(
+    cols = -c(dyad_id, kids, cohabitating),
+    names_to = c(".value", "gender"),
+    names_pattern = "(.*)_(w|m)"
+  ) %>%
+  mutate(gender = if_else(gender == "w", "Woman", "Man"))
+
+dyadic_wide$kids<- as.numeric(dyadic_wide$kids)
+dyadic_wide$cohabitating<- as.numeric(dyadic_wide$cohabitating)
+```
+
+
+# Models 1-2
+
+```{r}
+dyadic_wide$BS_int<- dyadic_wide$bs_w * dyadic_wide$bs_m
+
+
+mod.1 <- '
+  # Structural model
+  sat_m ~ bs_m + bs_w + BS_int + kids + cohabitating + hs_m + hs_w
+  sat_w ~ bs_w + bs_m + BS_int + kids + cohabitating + hs_w + hs_m
+  prob_m ~ bs_m + bs_w + BS_int + kids + cohabitating + hs_m + hs_w
+  prob_w ~ bs_w + bs_m + BS_int + kids + cohabitating + hs_w + hs_m
+  # Residual covariance
+  sat_m ~~ sat_w
+  prob_m ~~ prob_w
+  sat_m ~~ prob_w
+  sat_w ~~ prob_m
+  sat_w ~~ prob_w
+  sat_m ~~ prob_m
+
+'
+
+
+mod.2 <- '
+  # Structural model
+  house_stress_m ~ bs_m + bs_w + BS_int + kids + cohabitating + hs_m + hs_w
+  house_stress_w ~ bs_w + bs_m + BS_int + kids + cohabitating + hs_w + hs_m
+  fin_stress_m ~ bs_m + bs_w + BS_int + kids + cohabitating + hs_m + hs_w
+  fin_stress_w ~ bs_w + bs_m + BS_int + kids + cohabitating + hs_w + hs_m
+
+  # Residual covariance
+  house_stress_m ~~ house_stress_w
+  fin_stress_m ~~ fin_stress_w
+  house_stress_m ~~ fin_stress_w
+  house_stress_w ~~ fin_stress_m
+  house_stress_m ~~ fin_stress_m
+  house_stress_w ~~ fin_stress_w
+
+'
+
+
+```
+
+
+# Model 3 Work Norms
+
+```{r}
+dyadic_wide$wbs_mwork<- dyadic_wide$bs_w * dyadic_wide$work_m
+dyadic_wide$mbs_wwork<- dyadic_wide$bs_m * dyadic_wide$work_w
+
+mod.3 <- '
+  # Structural model
+  sat_m ~ bs_m + bs_w + work_m + work_w + wbs_mwork + mbs_wwork + kids + cohabitating + hs_m + hs_w
+  sat_w ~ bs_m + bs_w + work_m + work_w + wbs_mwork + mbs_wwork + kids + cohabitating + hs_m + hs_w
+  prob_m ~ bs_m + bs_w + work_m + work_w + wbs_mwork + mbs_wwork + kids + cohabitating + hs_m + hs_w
+  prob_w ~ bs_m + bs_w + work_m + work_w + wbs_mwork + mbs_wwork + kids + cohabitating + hs_m + hs_w
+
+  # Residual covariance
+  sat_m ~~ sat_w
+  prob_m ~~ prob_w
+  sat_m ~~ prob_w
+  sat_w ~~ prob_m
+  sat_w ~~ prob_w
+  sat_m ~~ prob_m
+  
+'
+  
+```
+
+
+# Models 4 Involvement with Children Norm
+
+```{r}
+dyadic_wide$mbs_wkids<- dyadic_wide$bs_m * dyadic_wide$goodkids_w
+dyadic_wide$wbs_mkids<- dyadic_wide$bs_w * dyadic_wide$goodkids_m
+
+mod.4 <- '
+  # Structural model
+  sat_m ~ bs_m + bs_w + goodkids_w + goodkids_m + mbs_wkids + wbs_mkids + kids + cohabitating + hs_m + hs_w
+  sat_w ~ bs_m + bs_w + goodkids_w + goodkids_m + mbs_wkids + wbs_mkids + kids + cohabitating + hs_m + hs_w
+  prob_m ~ bs_m + bs_w + goodkids_w + goodkids_m + mbs_wkids + wbs_mkids + kids + cohabitating + hs_m + hs_w
+  prob_w ~ bs_m + bs_w + goodkids_w + goodkids_m + mbs_wkids + wbs_mkids + kids + cohabitating + hs_m + hs_w
+
+  # Residual covariance
+  sat_m ~~ sat_w
+  prob_m ~~ prob_w
+  sat_m ~~ prob_w
+  sat_w ~~ prob_m
+  sat_w ~~ prob_w
+  sat_m ~~ prob_m
+  
+'
+
+```
+
+
+## Model 5
+
+```{r}
+dyadic_wide$wbs_mRom<- dyadic_wide$bs_w * dyadic_wide$prio_rel_m
+dyadic_wide$mbs_wRom<- dyadic_wide$bs_m * dyadic_wide$prio_rel_w
+
+mod.5 <- '
+  # Structural model
+  sat_m ~ bs_m + bs_w + prio_rel_m + prio_rel_w + wbs_mRom + mbs_wRom + kids + cohabitating + hs_m + hs_w
+  sat_w ~ bs_m + bs_w + prio_rel_m + prio_rel_w + wbs_mRom + mbs_wRom + kids + cohabitating + hs_m + hs_w
+  prob_m ~ bs_m + bs_w + prio_rel_m + prio_rel_w + wbs_mRom + mbs_wRom + kids + cohabitating + hs_m + hs_w
+  prob_w ~ bs_m + bs_w + prio_rel_m + prio_rel_w + wbs_mRom + mbs_wRom + kids + cohabitating + hs_m + hs_w
+
+  # Residual covariance
+  sat_m ~~ sat_w
+  prob_m ~~ prob_w
+  sat_m ~~ prob_w
+  sat_w ~~ prob_m
+  sat_w ~~ prob_w
+  sat_m ~~ prob_m
+  
+'
+  
+```
+
+
